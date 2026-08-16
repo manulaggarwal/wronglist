@@ -1,0 +1,8 @@
+# wronglist.txt — this repo's own constraints (dogfooded)
+# Scope: patterns/ + case-study prose. NOT bin/ or templates/ — those
+# legitimately contain the literals they detect/demonstrate (a lesson
+# in itself: point the wronglist where violations matter).
+#
+# Format: one literal per line. `#`-lines and blanks ignored;
+# trailing `  # reason` comments stripped before matching.
+REPLACE-WITH-REAL-CONSTRAINT   # placeholder — replace with a real constraint for this repo's prose

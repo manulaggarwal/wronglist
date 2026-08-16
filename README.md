@@ -1,30 +1,29 @@
-# taste-written-down
+# wronglist
 
 > **Agents forget. Files don't.**
-> Six copyable artifacts that make an AI agent *more correct* over time — not just faster: eval files, forbidden-string lists, review chains, adversarial fixtures, watch lists, run logs.
-> `npx taste init` writes them into your repo in 60 seconds, seeded from your own code.
+> Six copyable artifacts that make an AI agent *more correct* over time — not just faster: eval files, wronglists, review chains, adversarial fixtures, watch lists, run logs.
+> `wronglist init` writes them into your repo in 60 seconds, seeded from your own code.
 > Every pattern runs in production in one solo system — with the failures it caught and the ones it hasn't caught yet.
 > **Read [LIMITS.md](LIMITS.md) first** if you want to know what doesn't work yet.
 
 ---
 
-## Why this exists
+## Why "wronglist"?
 
-Agents got fast. Correctness didn't come along. Every session starts with the same
-amnesia, and every "improvement" is judged by vibes — *this output feels better*.
+Every project accumulates a private list of mistakes that must never happen
+again. Most teams keep it in someone's head. Agents don't have that head.
+The wronglist is that list, written down where every agent, every review,
+and every CI run can be held to it.
 
-The fix isn't a better prompt. It's **constraint files**: durable artifacts that
-encode what "good" means for YOUR project, get loaded automatically, and fire
-mechanically when violated. Taste, written down.
-
-"Evals are taste written down" — this repo takes that literally.
+`npx wronglist init` → `evals/wronglist.txt` → CI fails when a known-wrong
+pattern reappears. That's the whole idea.
 
 ## The six artifacts
 
 | Artifact | What it does | Template |
 |---|---|---|
 | **EVALS.md** | Golden examples + known failures + criteria. The quality bar for a project's fuzzy outputs. | [templates/EVALS.md](templates/EVALS.md) |
-| **forbidden-strings.txt** | The failure table made greppable. CI fails on any match. | [templates/forbidden-strings.txt](templates/forbidden-strings.txt) |
+| **wronglist.txt** | The failure table made greppable. CI fails on any match. | [templates/forbidden-strings.txt](templates/forbidden-strings.txt) |
 | **Review chain** | Multi-round adversarial reviews where each round must state what prior conclusions it invalidates. | [templates/REVIEW-CHAIN.md](templates/REVIEW-CHAIN.md) |
 | **Adversarial fixture** | A deliberately hostile test subject that breaks when your abstraction leaks. | [templates/tracer-fixture.md](templates/tracer-fixture.md) |
 | **Watch list** | Deferred adoptions with explicit revisit triggers. Future-proof = adoptable late, not early. | [templates/watch-list.md](templates/watch-list.md) |
@@ -33,15 +32,30 @@ mechanically when violated. Taste, written down.
 ## Quick start
 
 ```bash
-npx taste init          # in any repo — proposes domain-specific forbidden strings,
-                        # writes evals/EVALS.md, evals/forbidden-strings.txt,
-                        # ci/check-constraints.sh, pre-commit hook,
-                        # and appends @-imports to CLAUDE.md/AGENTS.md
+git clone https://github.com/manulaggarwal/wronglist && export PATH="$PWD/wronglist/bin:$PATH"
+# (npm publish pending — the CLI is dependency-free Node, clone-and-run works today)
 
-taste review <file>     # 3-round adversarial review with invalidation ledger
+wronglist init          # scan repo → propose wronglist entries → write evals/ + CI
+                        # + @-imports into CLAUDE.md/AGENTS.md (no API key, local only)
+
+wronglist check         # grep the wronglist — exit 1 on match, 0 clean, 2 config
+wronglist review FILE   # print the 3-round review-chain prompt for FILE
 ```
 
-No API key needed. `taste init` reads your repo and proposes constraints; you accept or edit. The grep runs locally.
+Example — init in a repo with real issues:
+
+```
+$ wronglist init
+  + evals/wronglist.txt (2 proposals — EDIT ME)
+    TODO          # found in README
+    Lorem ipsum   # placeholder in src/app.js
+  + evals/EVALS.md (skeleton — fill §1 with 3 golden examples)
+  + ci/check-constraints.sh (exit 1 on any match)
+
+$ wronglist check src
+  src/app.js:1:console.log("TODO implement");
+  ✗ WRONGLIST MATCHES FOUND — fix, or record in EVALS.md §2 if it's a known failure.
+```
 
 ## The patterns
 
@@ -59,11 +73,12 @@ a German grammar error in the flagship example got caught and fixed).
 
 ## Limits (read this)
 
-This system is **n=1, solo, built in one week**. The forbidden-strings file has **never
-fired in production** — its 20 patterns were mined from a review transcript, not CI
-failures. The read-at-start loop is only half closed (Claude Code auto-loads via
-@-imports; other agents get pointers). The write side — updating evals after each run —
-is entirely manual. Full honesty in [LIMITS.md](LIMITS.md).
+This system is **n=1, solo, built in one week**. The wronglist has **never
+fired in production** — its 20 patterns were mined from a review transcript,
+not CI failures. The read-at-start loop is only half closed (Claude Code
+auto-loads via @-imports; other agents get pointers). The write side —
+updating evals after each run — is entirely manual. Full honesty in
+[LIMITS.md](LIMITS.md).
 
 ## License
 

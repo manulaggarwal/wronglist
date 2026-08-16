@@ -9,8 +9,10 @@ the differentiation.
 `evals/forbidden-strings.txt` in the case-study project holds 20 patterns
 (invented words, wrong articles, dangerous content). **Zero have ever been caught
 by CI** — because no content exists yet to check. The patterns were mined from
-an adversarial review transcript, not from production failures. The mechanism is
-proven (grep + exit 1); the *catch rate* is unproven. We'll update this file the
+an adversarial review transcript, not from production failures. The mechanism ships green on
+its own test suite (dirty repo → exit 1, clean → exit 0 — verified after the
+first published version shipped with inverted exit logic, caught by review);
+the *catch rate* on real content is unproven. We'll update this file the
 day it fires for real.
 
 ## 2. The read-at-start loop is half closed
@@ -47,9 +49,11 @@ of the same stuff as the failures they prevent.
 
 ## 6. The CLI is new code by one author
 
-`taste init` reads your repo and proposes constraints. It will propose bad ones
-sometimes. It writes a pre-commit hook — review what it writes before you commit
-it, same as any tool.
+`wronglist init` reads your repo and proposes constraints. It will propose bad ones
+sometimes. Review what it writes before you commit it, same as any tool.
+(v0.1 shipped with inverted check-exit logic and an over-quoted CI default —
+both caught by an external review round, both fixed. That's this repo's own
+pattern working on itself.)
 
 ---
 

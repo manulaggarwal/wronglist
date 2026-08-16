@@ -1,10 +1,11 @@
 {
-  "name": "taste-written-down",
+  "name": "wronglist",
   "version": "0.1.0",
   "description": "Constraint files that make coding agents more correct over time. Templates + CLI.",
-  "bin": { "taste": "./bin/taste" },
+  "bin": { "wronglist": "./bin/wronglist" },
+  "files": ["bin", "templates", "patterns", "LICENSE", "README.md", "LIMITS.md"],
   "engines": { "node": ">=18" },
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/manulaggarwal/taste-written-down" },
+  "repository": { "type": "git", "url": "https://github.com/manulaggarwal/wronglist" },
   "keywords": ["evals", "agent-engineering", "claude-code", "llm-testing", "constraints"]
 }

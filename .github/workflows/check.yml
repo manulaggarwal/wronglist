@@ -1,0 +1,34 @@
+name: wronglist-check
+
+on: [push, pull_request]
+
+jobs:
+  constraints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax check
+        run: node --check bin/wronglist
+      - name: Constraints on prose
+        run: ./ci/check-constraints.sh patterns case-study || { echo "::error::wronglist matched in prose — fix or record in evals/EVALS.md §2"; exit 1; }
+      - name: Smoke test — init + check (dirty→1, clean→0)
+        run: |
+          set -e
+          export PATH="$PWD/bin:$PATH"
+          T=$(mktemp -d) && cd "$T" && git init -q .
+          echo "# t" > README.md && mkdir src
+          printf 'const x = "PLACEHOLDER TEXT here";\n' > src/a.js
+          wronglist init >/dev/null
+          # dirty → expect exit 1
+          if wronglist check src >/dev/null 2>&1; then echo "::error::dirty repo passed check (exit 0) — inverted logic regression"; exit 1; fi
+          # clean → expect exit 0
+          mkdir lib && echo "const ok = 1;" > lib/b.js
+          wronglist check lib
+          # CI script agrees
+          if ./ci/check-constraints.sh lib >/dev/null 2>&1; then echo "CI clean OK"; else echo "::error::CI script disagrees on clean repo"; exit 1; fi
+          echo "✓ smoke test passed: dirty→1, clean→0, CLI≡CI"
+      - name: Smoke test — review prints
+        run: bin/wronglist review README.md | grep -q "ROUND 1 — ADVERSARIAL"

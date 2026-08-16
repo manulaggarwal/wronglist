@@ -35,4 +35,4 @@ back.
 ## Template
 
 `templates/REVIEW-CHAIN.md` — round prompts + the ledger table format.
-The CLI prints the 3-round prompt: `taste review <file>`.
+The CLI prints the 3-round prompt: `wronglist review <file>`.

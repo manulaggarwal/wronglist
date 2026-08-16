@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
- * taste — constraint files that make coding agents more correct over time.
+ * wronglist — constraint files that make coding agents more correct over time.
  *
- *   taste init     scan repo → propose forbidden strings → write evals/ + CI + @-imports
- *   taste check    run the constraint grep now (exit 1 on match)
- *   taste review   print the 3-round review-chain prompt for a file
+ *   wronglist init     scan repo → propose wronglist entries → write evals/ + CI + @-imports
+ *   wronglist check    run the constraint grep now (exit 1 on match, 0 clean, 2 config)
+ *   wronglist review   print the 3-round review-chain prompt for a file
  *
  * No API keys. Everything local. Node 18+.
  */
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const { execSync } = require("child_process");
 
 const ARGS = process.argv.slice(2);
@@ -33,11 +34,21 @@ function readIfExists(p) {
 
 function log(s = "") { console.log(s); }
 
-/* ---------- shared proposal engine ---------- */
+// Strip comment lines and blanks from a wronglist file, return bare literals.
+// Writes a temp pattern file (grep -f needs a file; lines must be literals only).
+function effectivePatterns(wronglistPath) {
+  const raw = readIfExists(wronglistPath) || "";
+  const lines = raw.split("\n")
+    .map((l) => l.replace(/\s+#.*$/, "").trim()) // trailing inline comments + whitespace
+    .filter((l) => l !== "" && !l.startsWith("#"));
+  const tmp = path.join(os.tmpdir(), `wronglist-${Date.now()}.txt`);
+  fs.writeFileSync(tmp, lines.join("\n") + "\n");
+  return { tmp, count: lines.length };
+}
 
-// Heuristics: scan README + recent commits + biggest text files for
-// suspicious literals. Proposes candidates; human edits the file after.
-function proposeForbiddenStrings(root) {
+/* ---------- proposal engine ---------- */
+
+function proposeWronglistEntries(root) {
   const candidates = new Map(); // string -> reason
   const add = (s, why) => { if (s && s.length >= 4 && !candidates.has(s)) candidates.set(s, why); };
 
@@ -45,15 +56,17 @@ function proposeForbiddenStrings(root) {
   const readme = readIfExists(path.join(root, "README.md")) || readIfExists(path.join(root, "readme.md")) || "";
   for (const m of readme.matchAll(/\b(TODO|FIXME|XXX|HACK)\b/g)) add(m[1], "found in README");
   if (/lorem ipsum/i.test(readme)) add("Lorem ipsum", "placeholder text in README");
-  if (/TBD\b/.test(readme)) add("TBD", "TBD in README");
+  if (/\bTBD\b/.test(readme)) add("TBD", "TBD in README");
 
-  // 2. Recent commit messages (last 50)
+  // 2. Recent commit messages (last 50) — signals only, as comments
   try {
-    const log = execSync("git log --oneline -50", { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
-    for (const m of log.matchAll(/\b(typo|wrong|fix|broken|revert)\b/gi)) add(`# pattern: commits mention "${m[1]}" — check if a literal mistake repeats`, "commit-history signal");
+    const gitlog = execSync("git log --oneline -50", { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+    const signals = new Set();
+    for (const m of gitlog.matchAll(/\b(typo|wrong|broken|revert)\b/gi)) signals.add(m[1].toLowerCase());
+    if (signals.size) add(`# commit-history signal: mentions ${[...signals].join(", ")} — check if a literal mistake repeats`, "history");
   } catch {}
 
-  // 3. Source scan for classic agent-isms (small repos only, capped)
+  // 3. Source scan for classic agent-isms (capped)
   let scanned = 0;
   const walk = (dir) => {
     if (scanned > 200) return;
@@ -66,7 +79,7 @@ function proposeForbiddenStrings(root) {
       const body = readIfExists(p);
       if (!body) continue;
       if (/lorem ipsum/i.test(body)) add("Lorem ipsum", `placeholder in ${path.relative(root, p)}`);
-      for (const m of body.matchAll(/\b(TODO|FIXME|XXX)\b(?![^\n]*templates?)/g)) add(m[1], `found in ${path.relative(root, p)}`);
+      for (const m of body.matchAll(/\b(TODO|FIXME|XXX)\b/g)) add(m[1], `found in ${path.relative(root, p)}`);
     }
   };
   walk(root);
@@ -78,24 +91,24 @@ function writeConstraintFiles(root, proposals) {
   const evalsDir = path.join(root, "evals");
   fs.mkdirSync(evalsDir, { recursive: true });
 
-  const fsPath = path.join(evalsDir, "forbidden-strings.txt");
-  if (readIfExists(fsPath)) {
-    log(`  ↷ evals/forbidden-strings.txt exists — leaving untouched`);
+  const wlPath = path.join(evalsDir, "wronglist.txt");
+  if (readIfExists(wlPath)) {
+    log(`  ↷ evals/wronglist.txt exists — leaving untouched`);
   } else {
-    const lines = proposals.map(([s, why]) => `${s}   # ${why}`);
     const body = [
-      "# forbidden-strings.txt — CI-greppable constraints (proposed by `taste init`)",
+      "# wronglist.txt — CI-greppable constraints (proposed by `wronglist init`)",
       "# EDIT ME: keep what's real, delete what's noise, add what you know.",
-      "# Any literal line (minus comments) matching in SCOPE = FAIL.",
+      "# Format: one literal per line. `#`-lines and blanks are ignored;",
+      "# trailing `  # reason` comments are stripped before matching.",
       "#",
       "# SCOPE: point at generated/production content, not history/docs.",
-      "# Usage: taste check   (or ci/check-constraints.sh)",
+      "# Usage: wronglist check   (or ci/check-constraints.sh)",
       "#",
-      ...lines,
+      ...proposals.map(([s, why]) => (s.startsWith("#") ? s : `${s}   # ${why}`)),
       "",
     ].join("\n");
-    fs.writeFileSync(fsPath, body);
-    log(`  + evals/forbidden-strings.txt (${proposals.length} proposals — EDIT ME)`);
+    fs.writeFileSync(wlPath, body);
+    log(`  + evals/wronglist.txt (${proposals.length} proposals — EDIT ME)`);
   }
 
   const evalsPath = path.join(evalsDir, "EVALS.md");
@@ -104,7 +117,6 @@ function writeConstraintFiles(root, proposals) {
     log("  + evals/EVALS.md (skeleton — fill §1 with 3 golden examples)");
   } else log("  ↷ evals/EVALS.md exists — leaving untouched");
 
-  // CI script
   const ciDir = path.join(root, "ci");
   fs.mkdirSync(ciDir, { recursive: true });
   const checkPath = path.join(ciDir, "check-constraints.sh");
@@ -114,13 +126,12 @@ function writeConstraintFiles(root, proposals) {
     log("  + ci/check-constraints.sh (exit 1 on any match)");
   } else log("  ↷ ci/check-constraints.sh exists");
 
-  // @-imports into agent context files
   for (const name of ["CLAUDE.md", "AGENTS.md", "AGENT.md"]) {
     const p = path.join(root, name);
     const cur = readIfExists(p);
     if (!cur) continue;
-    if (cur.includes("@evals/forbidden-strings.txt")) { log(`  ↷ ${name} already imports constraints`); continue; }
-    fs.writeFileSync(p, cur.trimEnd() + "\n\n## Always-Loaded Constraints\n\n@evals/forbidden-strings.txt\n@evals/EVALS.md\n");
+    if (cur.includes("@evals/wronglist.txt")) { log(`  ↷ ${name} already imports constraints`); continue; }
+    fs.writeFileSync(p, cur.trimEnd() + "\n\n## Always-Loaded Constraints\n\n@evals/wronglist.txt\n@evals/EVALS.md\n");
     log(`  + ${name}: @-imports appended (Claude Code inlines these at session start)`);
   }
 }
@@ -129,44 +140,70 @@ function writeConstraintFiles(root, proposals) {
 
 function cmdInit() {
   const root = findRepoRoot();
-  log(`taste init — ${path.basename(root)}`);
+  log(`wronglist init — ${path.basename(root)}`);
   log("Scanning for constraint candidates (README, commits, sources)…\n");
-  const proposals = proposeForbiddenStrings(root);
-  if (!proposals.length) log("  (no obvious candidates found — templates will start empty)");
-  writeConstraintFiles(root, proposals.length ? proposals : [["EXAMPLE-FORBIDDEN-STRING", "replace with a real one"]]);
+  const proposals = proposeWronglistEntries(root);
+  const real = proposals.filter(([s]) => !s.startsWith("#"));
+  if (!real.length) log("  (no obvious candidates found — templates will start with one placeholder)");
+  writeConstraintFiles(root, real.length ? proposals : [["REPLACE-WITH-REAL-CONSTRAINT", "replace me"]]);
   log("\nNext:");
-  log("  1. EDIT evals/forbidden-strings.txt — keep only real constraints");
+  log("  1. EDIT evals/wronglist.txt — keep only real constraints");
   log("  2. Fill evals/EVALS.md §1 with 3-5 golden examples of good output");
-  log("  3. Run: taste check");
+  log("  3. Run: wronglist check");
 }
 
 function cmdCheck(scopeArgs) {
   const root = findRepoRoot();
-  const f = path.join(root, "evals", "forbidden-strings.txt");
-  if (!readIfExists(f)) { log("No evals/forbidden-strings.txt. Run `taste init` first."); process.exit(2); }
-  const scope = scopeArgs.length ? scopeArgs : ["src", "lib", "app", "content", "packs", "out", "dist", "docs"];
+  const wl = path.join(root, "evals", "wronglist.txt");
+  if (!readIfExists(wl)) { log("No evals/wronglist.txt. Run `wronglist init` first."); process.exit(2); }
+
+  const { tmp, count } = effectivePatterns(wl);
+  if (count === 0) { log("evals/wronglist.txt has no active entries (all comments/blanks)."); fs.unlinkSync(tmp); process.exit(2); }
+
+  // Default scope: generated/production content ONLY — never docs (see patterns/01).
+  const defaults = ["src", "lib", "app", "content", "packs", "out", "dist"];
+  const scope = scopeArgs.length ? scopeArgs : defaults;
   const existing = scope.filter((d) => fs.existsSync(path.join(root, d)));
-  if (!existing.length) { log(`No scope dirs found (looked in: ${scope.join(", ")}).\nPass paths explicitly: taste check <dir>`); process.exit(2); }
-  try {
-    execSync(`grep -rn -F -f "${f}" ${existing.map((d) => `"${d}"`).join(" ")} `, { cwd: root, stdio: "inherit" });
-    log(`\n✓ clean — no forbidden strings in: ${existing.join(", ")}`);
-  } catch (e) {
-    if (e.status === 1) { log(`\n✗ FORBIDDEN STRINGS FOUND (above). Fix or move to EVALS.md §2 as a known failure.`); process.exit(1); }
-    throw e;
+  if (!existing.length) {
+    log(`No scope dirs found (looked in: ${scope.join(", ")}).\nPass paths explicitly: wronglist check <dir>`);
+    fs.unlinkSync(tmp);
+    process.exit(2);
   }
+
+  let found = false;
+  try {
+    // grep exits 0 = matches found (violation), 1 = none (clean)
+    const out = execSync(
+      `grep -rn -F -f "${tmp}" ${existing.map((d) => `"${d}"`).join(" ")}`,
+      { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
+    );
+    found = true;
+    log(out.trimEnd());
+    log(`\n✗ WRONGLIST MATCHES FOUND — fix, or record in EVALS.md §2 if it's a known failure.`);
+  } catch (e) {
+    if (e.status === 1) {
+      log(`✓ clean — no wronglist matches in: ${existing.join(", ")}`);
+    } else {
+      log(`grep failed (exit ${e.status}): ${e.message}`);
+      fs.unlinkSync(tmp);
+      process.exit(2);
+    }
+  }
+  fs.unlinkSync(tmp);
+  if (found) process.exit(1);
 }
 
 function cmdReview(file) {
-  if (!file) { log("usage: taste review <file-or-dir>"); process.exit(2); }
+  if (!file) { log("usage: wronglist review <file-or-dir>"); process.exit(2); }
   log(TEMPLATES.review.replaceAll("<TARGET>", file));
 }
 
 function cmdHelp() {
-  log(`taste — constraint files that make coding agents more correct over time
+  log(`wronglist — constraint files that make coding agents more correct over time
 
-  taste init            scan repo, write evals/, ci/, @-imports (EDIT AFTER)
-  taste check [dirs…]   grep the forbidden strings — exit 1 on match
-  taste review <file>   print the 3-round review-chain prompt for <file>
+  wronglist init            scan repo, write evals/, ci/, @-imports (EDIT AFTER)
+  wronglist check [dirs…]   grep the wronglist — exit 1 on match, 0 clean, 2 config
+  wronglist review <file>   print the 3-round review-chain prompt for <file>
 
 No API keys. Everything local. Templates: templates/ in the repo.`);
 }
@@ -175,18 +212,22 @@ No API keys. Everything local. Templates: templates/ in the repo.`);
 
 const TEMPLATES = {
   check: `#!/usr/bin/env bash
-# check-constraints.sh — fails on any forbidden-string match.
+# check-constraints.sh — fails on any wronglist match.
 # Usage: ./ci/check-constraints.sh [scope dirs...]   (defaults below)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-SCOPE=("\${@:-src lib app content packs out dist docs}")
+if [ $# -gt 0 ]; then SCOPE=("$@"); else SCOPE=(src lib app content packs out dist); fi
 existing=()
 for d in "\${SCOPE[@]}"; do [ -d "$d" ] && existing+=("$d"); done
-[ \${#existing[@]} -eq 0 ] && { echo "no scope dirs found"; exit 0; }
-if grep -rn -F -f evals/forbidden-strings.txt "\${existing[@]}"; then
-  echo "✗ FORBIDDEN STRINGS FOUND — see matches above"; exit 1
+if [ \${#existing[@]} -eq 0 ]; then echo "no scope dirs found (looked in: \${SCOPE[*]})"; exit 2; fi
+# Strip comment lines + blanks + trailing comments/whitespace before matching
+PATTERNS=$(mktemp)
+sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' evals/wronglist.txt | grep -v -e '^[[:space:]]*$' -e '^#' > "$PATTERNS" || true
+if [ ! -s "$PATTERNS" ]; then echo "wronglist has no active entries"; rm -f "$PATTERNS"; exit 2; fi
+if grep -rn -F -f "$PATTERNS" "\${existing[@]}"; then
+  echo "✗ WRONGLIST MATCHES FOUND — see above"; rm -f "$PATTERNS"; exit 1
 fi
-echo "✓ constraints clean"
+echo "✓ constraints clean"; rm -f "$PATTERNS"
 `,
 
   evals: `# EVALS.md — quality bars for this repo
