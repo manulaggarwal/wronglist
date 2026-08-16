@@ -2,7 +2,7 @@
 
 > **Agents forget. Files don't.**
 > Six copyable artifacts that make an AI agent *more correct* over time — not just faster: eval files, wronglists, review chains, adversarial fixtures, watch lists, run logs.
-> `wronglist init` writes them into your repo in 60 seconds, seeded from your own code.
+> `wronglist init` writes them into your repo in 60 seconds, seeded from your own code. (No npm package yet — clone and run; the CLI is dependency-free Node.)
 > Every pattern runs in production in one solo system — with the failures it caught and the ones it hasn't caught yet.
 > **Read [LIMITS.md](LIMITS.md) first** if you want to know what doesn't work yet.
 
@@ -23,7 +23,7 @@ pattern reappears. That's the whole idea.
 | Artifact | What it does | Template |
 |---|---|---|
 | **EVALS.md** | Golden examples + known failures + criteria. The quality bar for a project's fuzzy outputs. | [templates/EVALS.md](templates/EVALS.md) |
-| **wronglist.txt** | The failure table made greppable. CI fails on any match. | [templates/forbidden-strings.txt](templates/forbidden-strings.txt) |
+| **wronglist.txt** | The failure table made greppable. CI fails on any match. | [templates/wronglist.txt](templates/wronglist.txt) |
 | **Review chain** | Multi-round adversarial reviews where each round must state what prior conclusions it invalidates. | [templates/REVIEW-CHAIN.md](templates/REVIEW-CHAIN.md) |
 | **Adversarial fixture** | A deliberately hostile test subject that breaks when your abstraction leaks. | [templates/tracer-fixture.md](templates/tracer-fixture.md) |
 | **Watch list** | Deferred adoptions with explicit revisit triggers. Future-proof = adoptable late, not early. | [templates/watch-list.md](templates/watch-list.md) |

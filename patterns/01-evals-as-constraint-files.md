@@ -25,7 +25,7 @@ A file, per project, with three sections:
    argument dies; the principle stays.
 
 Then make it bite: literal failure patterns go into a greppable
-`forbidden-strings.txt`; CI fails on match (see template). Point the grep at
+`wronglist.txt`; CI fails on match (see template). Point the grep at
 generated content, never at the historical docs you mined failures from.
 
 ## Why it works

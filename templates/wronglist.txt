@@ -1,8 +1,8 @@
-# forbidden-strings.txt — CI-greppable constraints
+# wronglist.txt — CI-greppable constraints
 # One literal pattern per line. Any match in <scope dirs> = CI FAIL.
 # Managed via EVALS.md §2 — do not edit without updating EVALS.
 #
-# Usage: grep -rn -f evals/forbidden-strings.txt <scope>/
+# Usage: grep -rn -F -f evals/wronglist.txt <scope>/
 # CI: ci/check-constraints.sh (exit 1 on any match)
 #
 # Scope note: point this at generated/production content, NOT historical

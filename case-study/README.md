@@ -37,7 +37,7 @@ examples), and a grammar example still contained `der Brezel` / `die Croissant`
 ## What shipped
 
 - `docs/ARCHITECTURE-FINAL.md` — 18 locked decisions, each traceable to a section
-- `docs/EVALS.md` + `evals/forbidden-strings.txt` — the quality bars (this repo's lead pattern, in production)
+- `docs/EVALS.md` + `evals/wronglist.txt` — the quality bars (this repo's lead pattern, in production)
 - A git repo, a CLAUDE.md with @-imports, and a daily-log discipline
 
 ## Timeline (honest)

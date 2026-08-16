@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 
 const ARGS = process.argv.slice(2);
 const CMD = ARGS[0] || "help";
@@ -35,15 +35,17 @@ function readIfExists(p) {
 function log(s = "") { console.log(s); }
 
 // Strip comment lines and blanks from a wronglist file, return bare literals.
-// Writes a temp pattern file (grep -f needs a file; lines must be literals only).
+// Writes a temp pattern file in a UNIQUE dir (grep -f needs a file; parallel
+// runs must never read each other's patterns — concurrency bug, fixed v0.2.1).
 function effectivePatterns(wronglistPath) {
   const raw = readIfExists(wronglistPath) || "";
   const lines = raw.split("\n")
     .map((l) => l.replace(/\s+#.*$/, "").trim()) // trailing inline comments + whitespace
     .filter((l) => l !== "" && !l.startsWith("#"));
-  const tmp = path.join(os.tmpdir(), `wronglist-${Date.now()}.txt`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wronglist-"));
+  const tmp = path.join(dir, "patterns.txt");
   fs.writeFileSync(tmp, lines.join("\n") + "\n");
-  return { tmp, count: lines.length };
+  return { tmp, count: lines.length, dir };
 }
 
 /* ---------- proposal engine ---------- */
@@ -70,7 +72,10 @@ function proposeWronglistEntries(root) {
   let scanned = 0;
   const walk = (dir) => {
     if (scanned > 200) return;
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { return; } // unreadable dir (EACCES etc.) — skip, don't crash
+    for (const e of entries) {
       if (e.name.startsWith(".") || ["node_modules", "dist", "build", "vendor", "__pycache__"].includes(e.name)) continue;
       const p = path.join(dir, e.name);
       if (e.isDirectory()) { walk(p); continue; }
@@ -157,8 +162,8 @@ function cmdCheck(scopeArgs) {
   const wl = path.join(root, "evals", "wronglist.txt");
   if (!readIfExists(wl)) { log("No evals/wronglist.txt. Run `wronglist init` first."); process.exit(2); }
 
-  const { tmp, count } = effectivePatterns(wl);
-  if (count === 0) { log("evals/wronglist.txt has no active entries (all comments/blanks)."); fs.unlinkSync(tmp); process.exit(2); }
+  const { tmp, count, dir } = effectivePatterns(wl);
+  if (count === 0) { log("evals/wronglist.txt has no active entries (all comments/blanks)."); fs.rmSync(dir, { recursive: true, force: true }); process.exit(2); }
 
   // Default scope: generated/production content ONLY — never docs (see patterns/01).
   const defaults = ["src", "lib", "app", "content", "packs", "out", "dist"];
@@ -166,16 +171,17 @@ function cmdCheck(scopeArgs) {
   const existing = scope.filter((d) => fs.existsSync(path.join(root, d)));
   if (!existing.length) {
     log(`No scope dirs found (looked in: ${scope.join(", ")}).\nPass paths explicitly: wronglist check <dir>`);
-    fs.unlinkSync(tmp);
+    fs.rmSync(dir, { recursive: true, force: true });
     process.exit(2);
   }
 
   let found = false;
   try {
-    // grep exits 0 = matches found (violation), 1 = none (clean)
-    const out = execSync(
-      `grep -rn -F -f "${tmp}" ${existing.map((d) => `"${d}"`).join(" ")}`,
-      { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
+    // grep exits 0 = matches found (violation), 1 = none (clean).
+    // execFileSync: no shell — scope args can never be interpreted as syntax.
+    const out = execFileSync(
+      "grep", ["-rn", "-F", "-f", tmp, ...existing],
+      { cwd: root, encoding: "utf8" }
     );
     found = true;
     log(out.trimEnd());
@@ -185,11 +191,11 @@ function cmdCheck(scopeArgs) {
       log(`✓ clean — no wronglist matches in: ${existing.join(", ")}`);
     } else {
       log(`grep failed (exit ${e.status}): ${e.message}`);
-      fs.unlinkSync(tmp);
+      fs.rmSync(dir, { recursive: true, force: true });
       process.exit(2);
     }
   }
-  fs.unlinkSync(tmp);
+  fs.rmSync(dir, { recursive: true, force: true });
   if (found) process.exit(1);
 }
 
@@ -222,7 +228,7 @@ for d in "\${SCOPE[@]}"; do [ -d "$d" ] && existing+=("$d"); done
 if [ \${#existing[@]} -eq 0 ]; then echo "no scope dirs found (looked in: \${SCOPE[*]})"; exit 2; fi
 # Strip comment lines + blanks + trailing comments/whitespace before matching
 PATTERNS=$(mktemp)
-sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' evals/wronglist.txt | grep -v -e '^[[:space:]]*$' -e '^#' > "$PATTERNS" || true
+sed -e 's/[[:space:]]#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' evals/wronglist.txt | grep -v -e '^[[:space:]]*$' -e '^#' > "$PATTERNS" || true
 if [ ! -s "$PATTERNS" ]; then echo "wronglist has no active entries"; rm -f "$PATTERNS"; exit 2; fi
 if grep -rn -F -f "$PATTERNS" "\${existing[@]}"; then
   echo "✗ WRONGLIST MATCHES FOUND — see above"; rm -f "$PATTERNS"; exit 1

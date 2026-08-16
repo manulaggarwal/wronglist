@@ -15,7 +15,7 @@ The fix that works today (Claude Code): **@-imports**.
 ```markdown
 ## Always-Loaded Constraints
 
-@evals/forbidden-strings.txt
+@evals/wronglist.txt
 @evals/EVALS.md
 ```
 

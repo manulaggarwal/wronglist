@@ -56,3 +56,29 @@ jobs:
           echo "ein schönes Ding" > src/x.txt 2>/dev/null || { mkdir src && echo "ein schönes Ding" > src/x.txt; }
           wronglist check src >/dev/null 2>&1 || [ $? -eq 1 ]
           echo "✓ edge tests passed"
+      - name: Concurrency + parity tests
+        run: |
+          set -e
+          export PATH="$PWD/bin:$PATH"
+          D=$(mktemp -d) && cd "$D" && git init -q .
+          echo "# p" > README.md && mkdir src lib
+          printf 'const v = "Lorem ipsum x";\n' > src/a.js
+          echo "const ok = 1;" > lib/b.js
+          wronglist init >/dev/null
+          # dirty-case parity: CLI and CI script must BOTH flag src
+          wronglist check src >/dev/null 2>&1 && { echo "::error::CLI clean on dirty"; exit 1; } || [ $? -eq 1 ]
+          ./ci/check-constraints.sh src >/dev/null 2>&1 && { echo "::error::CI clean on dirty"; exit 1; } || [ $? -eq 1 ]
+          # indented entry parity (leading-whitespace stripping)
+          printf '   Lorem ipsum\n' > evals/wronglist.txt
+          wronglist check src >/dev/null 2>&1 && { echo "::error::indented entry: CLI missed"; exit 1; } || [ $? -eq 1 ]
+          ./ci/check-constraints.sh src >/dev/null 2>&1 && { echo "::error::indented entry: CI script missed"; exit 1; } || [ $? -eq 1 ]
+          # parallel runs never cross-contaminate (temp isolation)
+          cd "$D"
+          for i in 1 2 3 4 5 6 7 8; do ( wronglist check src >/dev/null 2>&1; echo $? > /tmp/wl-exit-$i ) & done
+          for i in 1 2 3 4 5 6 7 8; do ( wronglist check lib >/dev/null 2>&1; echo $? > /tmp/wl-clean-$i ) & done
+          wait
+          for i in 1 2 3 4 5 6 7 8; do
+            [ "$(cat /tmp/wl-exit-$i)" = "1" ] || { echo "::error::parallel dirty run $i returned $(cat /tmp/wl-exit-$i)"; exit 1; }
+            [ "$(cat /tmp/wl-clean-$i)" = "0" ] || { echo "::error::parallel clean run $i returned $(cat /tmp/wl-clean-$i)"; exit 1; }
+          done
+          echo "\u2713 concurrency + parity tests passed"

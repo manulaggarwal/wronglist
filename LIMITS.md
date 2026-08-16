@@ -6,7 +6,7 @@ the differentiation.
 
 ## 1. The forbidden-strings file has never fired
 
-`evals/forbidden-strings.txt` in the case-study project holds 20 patterns
+`evals/wronglist.txt` in the case-study project holds 20 patterns
 (invented words, wrong articles, dangerous content). **Zero have ever been caught
 by CI** — because no content exists yet to check. The patterns were mined from
 an adversarial review transcript, not from production failures. The mechanism ships green on
@@ -20,7 +20,7 @@ day it fires for real.
 - **Claude Code:** `@imports` in CLAUDE.md genuinely inline the constraint files at
   session start. Verified: an auditor found the forbidden strings in its context
   unprompted.
-- **Other agents:** they get *pointers* ("see evals/forbidden-strings.txt").
+- **Other agents:** they get *pointers* ("see evals/wronglist.txt").
   A pointer is not a load. Whether any given agent opens the file is an election,
   and elections are exactly what the mechanism exists to remove.
 - **The write side is manual.** Nothing automatically appends outcomes to EVALS.md

@@ -5,4 +5,4 @@
 #
 # Format: one literal per line. `#`-lines and blanks ignored;
 # trailing `  # reason` comments stripped before matching.
-REPLACE-WITH-REAL-CONSTRAINT   # placeholder — replace with a real constraint for this repo's prose
+forbidden-strings   # this repo renamed to wronglist — the old name must not reappear in live docs (patterns/, templates/, README, LIMITS)

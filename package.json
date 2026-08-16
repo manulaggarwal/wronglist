@@ -1,6 +1,6 @@
 {
   "name": "wronglist",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Constraint files that make coding agents more correct over time. Templates + CLI.",
   "bin": { "wronglist": "./bin/wronglist" },
   "files": ["bin", "templates", "patterns", "LICENSE", "README.md", "LIMITS.md"],
