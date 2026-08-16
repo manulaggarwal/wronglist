@@ -1,5 +1,5 @@
 # wronglist.txt — this repo's own constraints (dogfooded)
-# Scope: patterns/ + case-study prose. NOT bin/ or templates/ — those
+# Scope: live prose (patterns/, templates/, README, LIMITS, before-after receipts).
 # legitimately contain the literals they detect/demonstrate (a lesson
 # in itself: point the wronglist where violations matter).
 #

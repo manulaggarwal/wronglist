@@ -13,7 +13,7 @@ jobs:
       - name: Syntax check
         run: node --check bin/wronglist
       - name: Constraints on prose
-        run: ./ci/check-constraints.sh patterns case-study || { echo "::error::wronglist matched in prose — fix or record in evals/EVALS.md §2"; exit 1; }
+        run: ./ci/check-constraints.sh patterns templates case-study/before-after README.md LIMITS.md || { echo "::error::wronglist matched in live prose (reviews/ is exempt history) — fix or record in evals/EVALS.md §2"; exit 1; }
       - name: Smoke test — init + check (dirty→1, clean→0)
         run: |
           set -e
