@@ -73,15 +73,19 @@ jobs:
           wronglist check src >/dev/null 2>&1 && { echo "::error::indented entry: CLI missed"; exit 1; } || [ $? -eq 1 ]
           ./ci/check-constraints.sh src >/dev/null 2>&1 && { echo "::error::indented entry: CI script missed"; exit 1; } || [ $? -eq 1 ]
           # parallel runs never cross-contaminate (temp isolation)
+          # One child bash owns the fan-out + wait; one results file; no reaping races.
           cd "$D"
-          R="$RUNNER_TEMP"; [ -n "$R" ] || R=/tmp
-          for i in 1 2 3 4 5 6 7 8; do touch "$R/wl-exit-$i" "$R/wl-clean-$i"; done
-          for i in 1 2 3 4 5 6 7 8; do ( wronglist check src >/dev/null 2>&1; echo "$?" > "$R/wl-exit-$i" ) & done
-          for i in 1 2 3 4 5 6 7 8; do ( wronglist check lib >/dev/null 2>&1; echo "$?" > "$R/wl-clean-$i" ) & done
-          wait
-          for i in 1 2 3 4 5 6 7 8; do
-            de="$(cat "$R/wl-exit-$i")"; ce="$(cat "$R/wl-clean-$i")"
-            [ "$de" = "1" ] || { echo "::error::parallel dirty run $i returned [$de]"; exit 1; }
-            [ "$ce" = "0" ] || { echo "::error::parallel clean run $i returned [$ce]"; exit 1; }
-          done
-          echo "\u2713 concurrency + parity tests passed"
+          bash -c '
+            export PATH="'"$PWD/bin"':$PATH"
+            OUT="$PWD/.results"; : > "$OUT"
+            for i in 1 2 3 4 5 6 7 8; do
+              ( wronglist check src >/dev/null 2>&1; echo "dirty:$i:$?" >> "$OUT" ) &
+              ( wronglist check lib >/dev/null 2>&1; echo "clean:$i:$?" >> "$OUT" ) &
+            done
+            wait
+          '
+          bad=$(grep -v -E "^dirty:[0-9]+:1$|^clean:[0-9]+:0$" .results || true)
+          n=$(wc -l < .results)
+          [ "$n" = "16" ] || { echo "::error::expected 16 results, got $n"; cat .results; exit 1; }
+          [ -z "$bad" ] || { echo "::error::unexpected parallel results:"; echo "$bad"; exit 1; }
+          echo "concurrency + parity tests passed"
