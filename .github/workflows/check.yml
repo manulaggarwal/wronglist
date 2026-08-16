@@ -34,3 +34,25 @@ jobs:
           echo "✓ smoke test passed: dirty→1, clean→0, CLI≡CI"
       - name: Smoke test — review prints
         run: bin/wronglist review README.md | grep -q "ROUND 1 — ADVERSARIAL"
+      - name: Edge tests
+        run: |
+          set -e
+          export PATH="$PWD/bin:$PATH"
+          # no-git dir: init must not crash
+          N=$(mktemp -d) && (cd "$N" && wronglist init >/dev/null)
+          # empty git repo: init succeeds, placeholder entry
+          E=$(mktemp -d) && cd "$E" && git init -q .
+          wronglist init >/dev/null && [ -f evals/wronglist.txt ]
+          # idempotent: second init leaves files untouched
+          before=$(md5 -q evals/wronglist.txt 2>/dev/null || md5sum evals/wronglist.txt | cut -d' ' -f1)
+          wronglist init >/dev/null
+          after=$(md5 -q evals/wronglist.txt 2>/dev/null || md5sum evals/wronglist.txt | cut -d' ' -f1)
+          [ "$before" = "$after" ] || { echo "::error::init is not idempotent"; exit 1; }
+          # comments-only wronglist → config error 2
+          printf '# only comments\n' > evals/wronglist.txt
+          wronglist check src >/dev/null 2>&1 && { echo "::error::comments-only wronglist should exit 2"; exit 1; } || [ $? -eq 2 ]
+          # CRLF + unicode patterns match correctly
+          printf 'sch\u00f6nes Ding\r\n' > evals/wronglist.txt
+          echo "ein schönes Ding" > src/x.txt 2>/dev/null || { mkdir src && echo "ein schönes Ding" > src/x.txt; }
+          wronglist check src >/dev/null 2>&1 || [ $? -eq 1 ]
+          echo "✓ edge tests passed"
