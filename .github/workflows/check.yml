@@ -20,8 +20,10 @@ jobs:
           export PATH="$PWD/bin:$PATH"
           T=$(mktemp -d) && cd "$T" && git init -q .
           echo "# t" > README.md && mkdir src
-          printf 'const x = "PLACEHOLDER TEXT here";\n' > src/a.js
+          printf 'const x = "Lorem ipsum placeholder";\n' > src/a.js
           wronglist init >/dev/null
+          # init must have proposed the planted violation (sanity)
+          grep -q "Lorem ipsum" evals/wronglist.txt
           # dirty → expect exit 1
           if wronglist check src >/dev/null 2>&1; then echo "::error::dirty repo passed check (exit 0) — inverted logic regression"; exit 1; fi
           # clean → expect exit 0
