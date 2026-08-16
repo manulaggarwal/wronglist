@@ -74,11 +74,14 @@ jobs:
           ./ci/check-constraints.sh src >/dev/null 2>&1 && { echo "::error::indented entry: CI script missed"; exit 1; } || [ $? -eq 1 ]
           # parallel runs never cross-contaminate (temp isolation)
           cd "$D"
-          for i in 1 2 3 4 5 6 7 8; do ( wronglist check src >/dev/null 2>&1; echo $? > /tmp/wl-exit-$i ) & done
-          for i in 1 2 3 4 5 6 7 8; do ( wronglist check lib >/dev/null 2>&1; echo $? > /tmp/wl-clean-$i ) & done
+          R="$RUNNER_TEMP"; [ -n "$R" ] || R=/tmp
+          for i in 1 2 3 4 5 6 7 8; do touch "$R/wl-exit-$i" "$R/wl-clean-$i"; done
+          for i in 1 2 3 4 5 6 7 8; do ( wronglist check src >/dev/null 2>&1; echo "$?" > "$R/wl-exit-$i" ) & done
+          for i in 1 2 3 4 5 6 7 8; do ( wronglist check lib >/dev/null 2>&1; echo "$?" > "$R/wl-clean-$i" ) & done
           wait
           for i in 1 2 3 4 5 6 7 8; do
-            [ "$(cat /tmp/wl-exit-$i)" = "1" ] || { echo "::error::parallel dirty run $i returned $(cat /tmp/wl-exit-$i)"; exit 1; }
-            [ "$(cat /tmp/wl-clean-$i)" = "0" ] || { echo "::error::parallel clean run $i returned $(cat /tmp/wl-clean-$i)"; exit 1; }
+            de="$(cat "$R/wl-exit-$i")"; ce="$(cat "$R/wl-clean-$i")"
+            [ "$de" = "1" ] || { echo "::error::parallel dirty run $i returned [$de]"; exit 1; }
+            [ "$ce" = "0" ] || { echo "::error::parallel clean run $i returned [$ce]"; exit 1; }
           done
           echo "\u2713 concurrency + parity tests passed"
